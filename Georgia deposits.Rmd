@@ -1,0 +1,73 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r setup}
+devtools::install_github("regisely/macrodata")
+library(devtools)
+library(macrodata)
+library(Quandl)
+library(rgdal)
+library(countrycode)
+library(sp)
+library(readr)
+```
+
+```{r}
+##set working directory to the file that has the 22 csv's
+setwd("~")
+
+##load all the files in that directory
+file.names <- list.files()
+
+##use lapply and read_csv to create a list of data frames containing the 22 csv's data
+gaCounty_list <- lapply(file.names, read_csv)
+
+##drop the unneeded columns and rename the remaining
+gaCounty_list <- lapply(gaCounty_list, function(x) {
+  x[!(names(x) %in% c("CERT", "BRNUM", "NAMEFULL"))] 
+})
+
+gaCounty_list <- lapply(gaCounty_list, "colnames<-", paste0(c("County", "Deposits")))
+
+
+##lapply and piping: omit na's, get deposits summmed by counties, rearrange in wide format
+gaCounty_list <- gaCounty_list %>% lapply(. %>% na.omit() %>% 
+                                   group_by(County) %>%
+                                   summarise(Total = sum(Deposits)) %>%
+                                   arrange(Total) %>% spread(County, Total)) 
+
+##merge all the dataframes in the list into one big dataframe, add dates, create xts object
+gaCounty_df <- bind_rows(gaCounty_list)
+dates <- seq(ymd('1994-06-30'),ymd('2015-06-30'),by='years')
+gaCounty_df <- cbind(date = dates, gaCounty_df[,-160])
+gaCounty_xts <- xts(gaCounty_df, order.by = as.Date(gaCounty_df$date))
+gaCounty_xts <- gaCounty_xts[,-1]
+
+```
+
+
+```{r, echo=FALSE}
+##get GA state map data in spatial data frame form. source: us census
+counties <- readOGR(".", "cb_2015_us_county_20m", verbose = FALSE)
+
+##get GA popultation by county
+ga_counties_data <- read_csv("GA-Counties-Data.csv")
+ga_counties_DF <- as.data.frame(ga_counties_data)
+colnames(ga_counties_DF) = ga_counties_DF[1, ]
+ga_counties_DF = ga_counties_DF[-1, ]
+
+save(gaCounty_xts, ga_counties_DF, file = 'sourceData.RDat')
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
+
+
+
+
+
+
+

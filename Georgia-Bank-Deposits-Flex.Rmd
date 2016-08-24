@@ -1,0 +1,106 @@
+---
+title: "Leaflet Dygraph Vignette"
+resource_files:
+- leafletvignetteDataGrab.R
+- sourceData.RDat
+runtime: shiny
+output:
+  flexdashboard::flex_dashboard:
+    source_code: embed
+    
+---
+
+```{r setup, include=FALSE}
+# Load packages and initialize data here
+library(flexdashboard)
+library(scales)
+library(dygraphs)
+library(leaflet)
+library(macrodata)
+library(dplyr)
+library(countrycode)
+library(ggplot2)
+library(DT)
+
+##load data
+load('sourceData.RDat')
+
+##create shading by county population
+GApal <- colorQuantile("Blues", ga$POPULATION, n = 20)
+
+GApopup <- paste0("<strong>County: </strong>", 
+                ga$NAME, 
+                "<br><strong>Population: </strong>", 
+                ga$POPULATION)
+
+leaf_georgia <- leaflet(ga) %>%
+  addProviderTiles("CartoDB.Positron") %>%
+      addPolygons(stroke = FALSE, smoothFactor = 0.2, fillOpacity = .7, color =
+      ~GApal(POPULATION), layerId = ~NAME, popup = GApopup)
+
+```
+
+
+Georgia Map {data-orientation=rows}
+=====================================
+
+Sidebar {.sidebar}
+-------------------------------------
+  
+```{r}
+
+helpText("Select an economic time series.")
+
+selectInput("indicatorselect1", "Choose a time series", 
+                          choices = c("Deposits", "Unemployment Rate", 
+                                      "Average Mortgage Size"))
+
+```
+
+Row {data-height=650}
+-------------------------------------
+
+### Georgia Counties
+
+```{r, echo = FALSE}
+
+leafletOutput("map2")
+
+  output$map2 <- renderLeaflet({
+    leaf_georgia
+  })
+
+```
+
+Row {data-height=350}
+-------------------------------------
+
+### Total Deposits over Time
+
+```{r}
+##get the county that was clicked on
+
+dygraphOutput("dygraph3")
+
+clickedCounty <- eventReactive(input$map2_shape_click, {
+     return(input$map2_shape_click$id)
+     })
+
+output$dygraph3 <- renderDygraph({
+dygraph(gaCounty_xts[, as.character(clickedCounty())], main = clickedCounty()) %>%
+      dyRangeSelector(height = 20) %>%
+  dyAxis(
+    "y",
+    label = "Deposits",
+    valueFormatter = 'function(d){return d.toString().replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",");}',
+    axisLabelFormatter = 'function(d){return d.toString().replace(/\\B(?=(\\d{3})+(?!\\d))/g, ",");}',
+    axisLabelFontSize = 10,
+    axisLabelWidth = 70) %>% 
+    dyShading(from = "2007-12-01", to = "2009-06-01", color = "#FFE6E6") %>% 
+      dyEvent(x = "2008-09-15", label = "Fin Crisis", labelLoc =
+      "top", color = "red")
+      })
+```
+
+
+
